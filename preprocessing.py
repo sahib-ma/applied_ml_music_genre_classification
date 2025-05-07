@@ -21,18 +21,35 @@ def preprocess_audio_dataset(audio_files, labels, sr=22050, n_mels=128, pca_comp
     y_expanded = []
 
     for file_path, label in zip(audio_files, labels):
-        clips = split_audio_into_clips(file_path)
-        for clip in clips:
-            mel_spec = extract_mel_spectrogram(clip, sr=sr, n_mels=n_mels)
-            X_features.append(mel_spec)
-            y_expanded.append(label)
+        try:
+            clips = split_audio_into_clips(file_path)
+            if not clips:
+                print(f"Skipped (too short or empty): {file_path}")
+                continue
+
+            for clip in clips:
+                mel_spec = extract_mel_spectrogram(clip, sr=sr, n_mels=n_mels)
+                if mel_spec.size == 0:
+                    print(f"Empty Mel spectrogram: {file_path}")
+                    continue
+                X_features.append(mel_spec)
+                y_expanded.append(label)
+
+        except Exception as e:
+            print(f"Failed to process {file_path}: {e}")
+            continue
+
+    if not X_features:
+        raise ValueError("No valid audio features were extracted. Check your input files.")
 
     # Normalize between 0 and 1
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X_features)
 
     # Apply PCA
-    pca = PCA(n_components=pca_components)
+    max_components = min(len(X_scaled), len(X_scaled[0]))
+    pca = PCA(n_components=min(pca_components, max_components))
     X_pca = pca.fit_transform(X_scaled)
 
     return X_pca, y_expanded, scaler, pca
+
